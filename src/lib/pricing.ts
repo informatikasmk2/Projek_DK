@@ -44,19 +44,32 @@ export function calculateTotal(
 export interface ItemCalc {
   costPrice: number;
   multiplier: number;
-  installationFee: number;
   sellingPrice: number;
-  subtotal: number;
 }
 
 export function calculateItem(
   costPrice: number,
-  multiplier: number,
-  installationFee: number
+  multiplier: number
 ): ItemCalc {
   const sellingPrice = costPrice * multiplier;
-  const subtotal = sellingPrice + installationFee;
-  return { costPrice, multiplier, installationFee, sellingPrice, subtotal };
+  return { costPrice, multiplier, sellingPrice };
+}
+
+const RISK_ORDER: Record<RiskLevel, number> = { ringan: 0, sedang: 1, sulit: 2 };
+
+export function getTransactionInstallationFee(
+  items: { riskLevel: RiskLevel }[],
+  pricing: PricingSetting[]
+): number {
+  if (items.length === 0) return 0;
+  let highestRisk: RiskLevel = items[0].riskLevel;
+  for (const item of items) {
+    if (RISK_ORDER[item.riskLevel] > RISK_ORDER[highestRisk]) {
+      highestRisk = item.riskLevel;
+    }
+  }
+  const p = pricing.find((pr) => pr.risk_level === highestRisk);
+  return p?.installation_fee ?? 0;
 }
 
 export interface MultiItemTotal {
@@ -68,11 +81,12 @@ export interface MultiItemTotal {
 }
 
 export function calculateMultiItemTotal(
-  items: { sellingPrice: number; installationFee: number }[],
+  items: { sellingPrice: number }[],
+  installationFee: number,
   roundingMode: RoundingMode
 ): MultiItemTotal {
   const totalSparepart = items.reduce((sum, i) => sum + i.sellingPrice, 0);
-  const totalService = items.reduce((sum, i) => sum + i.installationFee, 0);
+  const totalService = installationFee;
   const subtotal = totalSparepart + totalService;
   const { rounded, difference } = applyRounding(subtotal, roundingMode);
   return { totalSparepart, totalService, subtotal, rounding: difference, total: rounded };

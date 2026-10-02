@@ -2,7 +2,7 @@ import { useState, useEffect, useMemo } from 'react';
 import { supabase } from '@/lib/supabase';
 import { navigate } from '@/lib/router';
 import { formatRupiah, todayISO, addDays } from '@/lib/format';
-import { calculateItem, calculateMultiItemTotal } from '@/lib/pricing';
+import { calculateItem, calculateMultiItemTotal, getTransactionInstallationFee } from '@/lib/pricing';
 import { usePricingSettings } from '@/lib/hooks';
 import { RISK_LEVELS, WARRANTY_OPTIONS, ROUNDING_OPTIONS, REPAIR_STATUSES } from '@/lib/types';
 import type { RiskLevel, RoundingMode, RepairWithDetails, RepairDamage, RepairItem, PricingSetting } from '@/lib/types';
@@ -86,17 +86,20 @@ export function EditService({ repairId }: { repairId: string }) {
       const cp = parseFloat(item.costPrice) || 0;
       const p = pricing.find((pr) => pr.risk_level === item.riskLevel);
       if (!p || cp <= 0) return null;
-      return calculateItem(cp, p.multiplier, p.installation_fee);
+      return calculateItem(cp, p.multiplier);
     });
   }, [items, pricing]);
 
   const totals = useMemo(() => {
     const valid = itemCalcs.filter((c): c is NonNullable<typeof c> => c !== null);
+    const validItems = items.filter((_, i) => itemCalcs[i] !== null);
+    const fee = getTransactionInstallationFee(validItems, pricing);
     return calculateMultiItemTotal(
-      valid.map((c) => ({ sellingPrice: c.sellingPrice, installationFee: c.installationFee })),
+      valid.map((c) => ({ sellingPrice: c.sellingPrice })),
+      fee,
       roundingMode
     );
-  }, [itemCalcs, roundingMode]);
+  }, [itemCalcs, items, pricing, roundingMode]);
 
   const warrantyDays = useMemo(() => {
     if (warrantyMode === 'custom') return parseInt(warrantyCustom) || 0;
@@ -164,8 +167,8 @@ export function EditService({ repairId }: { repairId: string }) {
           risk_level: item.riskLevel,
           risk_multiplier: calc.multiplier,
           selling_price: calc.sellingPrice,
-          installation_fee: calc.installationFee,
-          subtotal: calc.subtotal,
+          installation_fee: 0,
+          subtotal: calc.sellingPrice,
         });
       }
 
@@ -256,8 +259,6 @@ export function EditService({ repairId }: { repairId: string }) {
               {calc && (
                 <div className="bg-slate-50 rounded-lg p-2.5 text-xs space-y-1">
                   <div className="flex justify-between font-medium"><span className="text-slate-600">Harga Sparepart</span><span>{formatRupiah(calc.sellingPrice)}</span></div>
-                  <div className="flex justify-between font-medium"><span className="text-slate-600">Jasa Pasang</span><span>{formatRupiah(calc.installationFee)}</span></div>
-                  <div className="flex justify-between font-bold text-sm pt-1 border-t border-slate-200"><span>Subtotal</span><span className="text-blue-600">{formatRupiah(calc.subtotal)}</span></div>
                 </div>
               )}
             </div>
@@ -271,7 +272,7 @@ export function EditService({ repairId }: { repairId: string }) {
       {/* Totals */}
       <div className="bg-gradient-to-br from-slate-800 to-slate-900 rounded-2xl p-4 text-white space-y-2">
         <div className="flex justify-between text-sm"><span className="text-slate-300">Total Sparepart</span><span>{formatRupiah(totals.totalSparepart)}</span></div>
-        <div className="flex justify-between text-sm"><span className="text-slate-300">Total Jasa</span><span>{formatRupiah(totals.totalService)}</span></div>
+        <div className="flex justify-between text-sm"><span className="text-slate-300">Jasa Pasang (1×)</span><span>{formatRupiah(totals.totalService)}</span></div>
         {roundingMode !== 'none' && (
           <>
             <div className="flex justify-between text-sm pt-1 border-t border-slate-700"><span className="text-slate-300">Subtotal</span><span>{formatRupiah(totals.subtotal)}</span></div>
